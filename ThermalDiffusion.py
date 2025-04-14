@@ -1,7 +1,6 @@
 # Imports
 from scipy.integrate import solve_ivp
 import numpy as np
-import matplotlib.pyplot as plt
 
 
 # analytical method
@@ -29,8 +28,18 @@ def g(heatAdd_,j_,count_,segmentStart,segmentEnd,totRodSeg ):
     return rod
 
 
-
-# this code tries to model the rod and sinks, not deemed to be working as of 9/15/2023
+"""
+There are two implementation for the numerical solution : 
+    1. numMetVec: 
+        - This implementation uses the Euler method 
+        
+    2. numMCS:
+        - This implementation uses the solve_ivp function provided by SciPy library in which the default method for solving the ODE is RK45  which is Explicit Runge-Kutta method of order 5(4)
+        more info on solve_IVP odesolvers:
+        https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.solve_ivp.html
+    
+"""
+# Numerical solution: Euler method
 def numMetVec(duration,rodLength,dt,dx,thermalConductivity,heatPulseLength,heaterPosition,heaterLength,boundaryCondition,roomTemp,convectiveHeatTransfer,heatlossBool,Q ,crossArea,volumetricHeatCapacity,BoundaryConditionState):
 
     lambda_=(thermalConductivity*dt)/(volumetricHeatCapacity*(dx**2))
@@ -72,7 +81,7 @@ def numMetVec(duration,rodLength,dt,dx,thermalConductivity,heatPulseLength,heate
         # heat diffusion on the Right end using bcS (boundary condition State)
         # if sunk
         if BoundaryConditionState[1] == 1:
-            # noting needs to be done here but just here for place holder
+            # nothing needs to be done here but just here for place holder
             pass
         # if float
         if BoundaryConditionState[1] == 2:
@@ -85,7 +94,7 @@ def numMetVec(duration,rodLength,dt,dx,thermalConductivity,heatPulseLength,heate
         # heat diffusion on the Left end using bcS (boundary condition State)
         # if sunk
         if BoundaryConditionState[0] == 1:
-            # noting needs to be done here but just here for place holder
+            # nothing needs to be done here but just here for place holder
             pass
 
         # if float
@@ -98,3 +107,60 @@ def numMetVec(duration,rodLength,dt,dx,thermalConductivity,heatPulseLength,heate
 
     # returing the temperature difference
     return T -roomTemp
+
+
+# Numerical solution: Solve IVP version (RK45)
+def numMCS(duration,rodLength,dt,dx,thermalConductivity,heatPulseLength,heaterPosition,heaterLength,boundaryCondition,roomTemp,convectiveHeatTransfer,heatlossBool,Q ,crossArea,volumetricHeatCapacity,BoundaryConditionState):
+    beta = thermalConductivity/(volumetricHeatCapacity*dx**2) 
+    gamma = 1/volumetricHeatCapacity
+
+    delta = 2*convectiveHeatTransfer/(volumetricHeatCapacity*crossArea)
+
+    N = int(rodLength/dx)
+    x = np.arange(0,rodLength,dx) +dx/2 -rodLength/2 
+    num_seg = sum(abs(x)<= heaterLength/2) 
+    x_h = np.zeros(len(x))
+    x_h[int((N-num_seg)/2):int((N+num_seg)/2)]=1
+    vol_h = np.pi*num_seg*dx*crossArea**2 
+
+    P = Q/heatPulseLength    
+    x_h = x_h*(P/vol_h)
+
+
+    y_0 = np.zeros(N)
+    tspan = [0, duration]
+    result = solve_ivp(numMCS_helper, tspan, y_0,args= (beta, gamma, delta, x_h, heatPulseLength, BoundaryConditionState))
+    return result
+
+
+
+def numMCS_helper(t, y, beta_, gamma_, delta_, x_h_, t_pulse_, bcS_):
+    
+    if t>=t_pulse_:
+        gamma_= 0
+    
+    rhs_out = np.zeros(len(y))
+    rhs_out[1:-1] = beta_*(y[2:]-2*y[1:-1]+y[:-2])+ gamma_*x_h_[1:-1]- delta_*y[1:-1]
+
+    #Left side of the rod boundary conditions
+    if bcS_[0] ==1:
+        # Here is a heat sunk at the left side of the rod.
+        rhs_out[0] = 0
+    if bcS_[0] ==2:
+        # This is the near end of the rod, floating.
+        rhs_out[0] = (2*beta_)*(y[1]-y[0])- delta_*y[0]
+
+        # rhs_out[0] = (beta_/2)*(8*y[1]-y[2]-7*y[0])- delta_*y[0]
+        # rhs_out[1] = (2*beta_)*(y[2]-y[1])- delta_*y[1]
+    
+    #Right side of the rod boundary conditions
+    if bcS_[1] ==1:
+        # Here is a heat sunk at the left side of the rod.
+        rhs_out[-1] = 0
+    if bcS_[1] ==2:
+        # This is the near end of the rod, floating.
+        rhs_out[-1] = (2*beta_)*(y[-2]-y[-1])- delta_*y[-1] 
+        # rhs_out[-1] = (beta_/2)*(8*y[-2]-y[-3]-7*y[-1])- delta_*y[-1]
+        # rhs_out[-2] = (2*beta_)*(y[-3]-y[-2])- delta_*y[-2] 
+
+    return rhs_out 
