@@ -107,9 +107,10 @@ def EulerMethod(duration,rodLength,dt,dx,thermalConductivity,heatPulseLength,hea
         if BoundaryConditionState[0] == 2:
             T[0,j] = T[0,j-1]+(2*dt*beta)*(T[1,j-1]  - T[0,j-1]) 
  
+ 
         if heatlossBool:
             # heat loss for copper rod
-            T[1:-1,j] =  T[1:-1,j] - (T[1:-1,j]  - T[1:-1,j-1])*delta*dt
+            T[1:-1,j] =  T[1:-1,j] - np.abs(roomTemp  - T[1:-1,j])*delta*dt
 
     # returing the temperature difference
     return T -roomTemp,t
@@ -158,7 +159,7 @@ def numMCS_helper(t, y, beta_, gamma_, delta_, x_h_, t_pulse_, bcS_,heatlossBool
         gamma_= 0
     
     rhs_out = np.zeros(len(y))
-    rhs_out[1:-1] = beta_*(y[2:]-2*y[1:-1]+y[:-2])+ gamma_*x_h_[1:-1]- delta_*y[1:-1]
+    rhs_out[1:-1] = beta_*(y[2:]-2*y[1:-1]+y[:-2])+ gamma_*x_h_[1:-1]
     
     if heatlossBool:
         # heat loss for copper rod
