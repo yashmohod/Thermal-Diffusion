@@ -4,20 +4,18 @@ import numpy as np
 
 
 # analytical method
-def anaMet(Q,crossArea,thermalConductivity,volumetricHeatCapacity,t,positionOnRod,convectiveHeatTransfer,a_,heatlossBool,lag,dt_):
+def anaMet(Q_,A_,kappa_,s_,t,d_,h_,a_,heatlossBool_,lag,dt_):
 
-    t_  = np.arange(0,t,dt_)
-    temp2 = np.zeros(int((t+lag)/dt_))
-    if heatlossBool:
-        # analytical method with heatloss
-        temp = Q / (2 * crossArea * np.sqrt(np.pi * thermalConductivity * volumetricHeatCapacity * t_)) * np.e**(-(positionOnRod**2) * volumetricHeatCapacity / (4 * thermalConductivity * t_)) * np.e**(((-2*convectiveHeatTransfer / a_)*t_) / volumetricHeatCapacity)
+    t_  = np.arange(dt_,t,dt_)
+    temp2 = np.zeros(int((t+lag)/dt_)-1)
+    if heatlossBool_:
+        temp = Q_ / (2 * A_ * np.sqrt(np.pi * kappa_ * s_ * t_)) * np.e**(-(d_**2) * s_ / (4 * kappa_ * t_)) * np.e**(((-2*h_ / a_)*t_) / s_)
         temp2[int(lag/dt_):] = temp[:]
-        return temp2
+        return temp2,t_
     else:
-        # analytical method without heatloss
-        temp  =  Q / (2 * crossArea * np.sqrt(np.pi * thermalConductivity * volumetricHeatCapacity * t_)) * np.e**(-(positionOnRod**2) * volumetricHeatCapacity / (4 * thermalConductivity * t_))
+        temp  =  Q_ / (2 * A_ * np.sqrt(np.pi * kappa_ * s_ * t_)) * np.e**(-(d_**2) * s_ / (4 * kappa_ * t_))
         temp2[int(lag/dt_):] = temp[:]
-        return temp2 
+        return temp2 ,t_
     
 # numerical method Vectorized
 def g(heatAdd_,j_,count_,segmentStart,segmentEnd,totRodSeg ):
@@ -40,44 +38,54 @@ There are two implementation for the numerical solution :
     
 """
 # Numerical solution: Euler method
-def numMetVec(duration,rodLength,dt,dx,thermalConductivity,heatPulseLength,heaterPosition,heaterLength,boundaryCondition,roomTemp,convectiveHeatTransfer,heatlossBool,Q ,crossArea,volumetricHeatCapacity,BoundaryConditionState):
-
-    lambda_=(thermalConductivity*dt)/(volumetricHeatCapacity*(dx**2))
-
-    # heat being added
-    heatAdd = ((Q)/( heatPulseLength*heaterLength*np.pi * (crossArea**2) ))*(dt/volumetricHeatCapacity)
+def EulerMethod(duration,rodLength,dt,dx,thermalConductivity,heatPulseLength,heaterPosition,heaterLength,boundaryCondition,roomTemp,convectiveHeatTransfer,heatlossBool,Q ,radius,volumetricHeatCapacity,BoundaryConditionState):
 
     # sapce time matrix (values represent temperature) 
-    t_ = np.arange(0,duration,dt)
-    x_ = np.arange(0,rodLength,dx)
-    T = np.ones((len(x_),len(t_)))*roomTemp
+    T = np.ones((int(rodLength/dx),int(duration/dt)))*roomTemp
 
-
-
-        
+    # time array
+    t = np.arange(0,duration,dt)
+    
     # applying bcT (boundary condition Temperature)
     if BoundaryConditionState[0] == 1:
         T[0,:] = boundaryCondition[0]
     if BoundaryConditionState[1] == 1:
         T[-1,:] = boundaryCondition[1]
-    spot = 0
-    here = 0
+        
+    # Constants 
+    beta = thermalConductivity/(volumetricHeatCapacity*dx**2) 
+    gamma = 1
+    delta = 2*convectiveHeatTransfer/(volumetricHeatCapacity*radius)
+
     
-    for j in x_:
-        if j == heaterPosition:
-            here = spot
-        spot +=1
+    # number of segments in heater
+    num_seg = int(heaterLength/dx)
+    
+    # heater array 
+    # (The array is 1 where the heater is and 0 everywhere else)
+    x_h = np.zeros(int(rodLength/dx))
+    x_h[int((heaterPosition/dx)-(num_seg/2)):int((heaterPosition/dx)+(num_seg/2))]=1
+    
 
-    totalSegments = heaterLength/dx
-    segmentStart=0
-    segmentEnd=here + round(totalSegments/2)
- 
-    if totalSegments %2 ==0:
-        segmentStart = here - (round(totalSegments/2) -1)
-    else:
-        segmentStart = here - round(totalSegments/2)
+    # volume of heater
+    vol_h = np.pi*num_seg*dx*radius**2 
+    # Energy supplied per m^3
+    E = Q*(dt/heatPulseLength)/vol_h/volumetricHeatCapacity
+    
+    # This vector is now have E at place of heater and 0 everywhere else.
+    x_h = x_h*E
 
-    for j in range(1,len(t_)):
+    for j in range(1,len(t)):
+        
+        # Heater switch 
+        # (gamma = 1 for t < heatPulse)
+        # (gamma = 10 for t > heatPulse)
+        if j>=round(heatPulseLength/dt):
+            gamma= 0
+
+        # heat diffusion in the rod
+        T[1:-1,j] =  T[1:-1,j-1] + (dt*beta*(T[:-2,j-1] - 2*T[1:-1,j-1] + T[2:,j-1])) +gamma*x_h[1:-1]
+        
         # heat diffusion on the Right end using bcS (boundary condition State)
         # if sunk
         if BoundaryConditionState[1] == 1:
@@ -86,11 +94,9 @@ def numMetVec(duration,rodLength,dt,dx,thermalConductivity,heatPulseLength,heate
         # if float
         if BoundaryConditionState[1] == 2:
             # temp.append((T[-2,j-1]  - T[-1,j-1]  ))
-            T[-1,j] = T[-1,j-1] + (2*lambda_)*(T[-2,j-1]  - T[-1,j-1]  ) 
-
-        # heat diffusion in the rod
-        T[1:-1,j] =  T[1:-1,j-1] + (lambda_*(T[:-2,j-1] - 2*T[1:-1,j-1] + T[2:,j-1])) +g(heatAdd,j,round(heatPulseLength/dt),segmentStart,segmentEnd,len(x_))[1:-1]
-
+            T[-1,j] = T[-1,j-1] + (2*dt*beta)*(T[-2,j-1]  - T[-1,j-1]  )
+            
+        
         # heat diffusion on the Left end using bcS (boundary condition State)
         # if sunk
         if BoundaryConditionState[0] == 1:
@@ -99,68 +105,92 @@ def numMetVec(duration,rodLength,dt,dx,thermalConductivity,heatPulseLength,heate
 
         # if float
         if BoundaryConditionState[0] == 2:
-            T[0,j] = T[0,j-1]+(2*lambda_)*(T[1,j-1]  - T[0,j-1]) 
-
+            T[0,j] = T[0,j-1]+(2*dt*beta)*(T[1,j-1]  - T[0,j-1]) 
+ 
         if heatlossBool:
             # heat loss for copper rod
-            T[:,j] =  T[:,j] - (T[:,j-1]- roomTemp)*((2*convectiveHeatTransfer*dt) / (crossArea*volumetricHeatCapacity)) 
+            T[1:-1,j] =  T[1:-1,j] - (T[1:-1,j]  - T[1:-1,j-1])*delta*dt
 
     # returing the temperature difference
-    return T -roomTemp
+    return T -roomTemp,t
 
 
-# Numerical solution: Solve IVP version (RK45)
-def numMCS(duration,rodLength,dt,dx,thermalConductivity,heatPulseLength,heaterPosition,heaterLength,boundaryCondition,roomTemp,convectiveHeatTransfer,heatlossBool,Q ,crossArea,volumetricHeatCapacity,BoundaryConditionState):
-    beta = thermalConductivity/(volumetricHeatCapacity*dx**2) 
-    gamma = 1/volumetricHeatCapacity
-
-    delta = 2*convectiveHeatTransfer/(volumetricHeatCapacity*crossArea)
-
-    N = int(rodLength/dx)
-    x = np.arange(0,rodLength,dx) +dx/2 -rodLength/2 
-    num_seg = sum(abs(x)<= heaterLength/2) 
-    x_h = np.zeros(len(x))
-    x_h[int((N-num_seg)/2):int((N+num_seg)/2)]=1
-    vol_h = np.pi*num_seg*dx*crossArea**2 
-
-    P = Q/heatPulseLength    
-    x_h = x_h*(P/vol_h)
-
-
-    y_0 = np.zeros(N)
-    tspan = [0, duration]
-    result = solve_ivp(numMCS_helper, tspan, y_0,args= (beta, gamma, delta, x_h, heatPulseLength, BoundaryConditionState))
-    return result
-
-
-
-def numMCS_helper(t, y, beta_, gamma_, delta_, x_h_, t_pulse_, bcS_):
+def SolveIVP_Method (duration,rodLength,dt,dx,thermalConductivity,heatPulseLength,heaterPosition,heaterLength,boundaryCondition,roomTemp,convectiveHeatTransfer,heatlossBool,Q ,radius,volumetricHeatCapacity,BoundaryConditionState):
     
+    # Now the PDE constants:
+    # Constants 
+    beta = thermalConductivity/(volumetricHeatCapacity*dx**2) 
+    gamma = 1
+    delta = 2*convectiveHeatTransfer/(volumetricHeatCapacity*radius)
+
+    
+    # number of segments in heater
+    num_seg = int(heaterLength/dx)
+    
+    # heater array 
+    # (The array is 1 where the heater is and 0 everywhere else)
+    x_h = np.zeros(int(rodLength/dx))
+    x_h[int((heaterPosition/dx)-(num_seg/2)):int((heaterPosition/dx)+(num_seg/2))]=1
+    
+
+    # volume of heater
+    vol_h = np.pi*num_seg*dx*radius**2 
+    # Power supplied per m^3
+    P = Q*(1/heatPulseLength)/vol_h/volumetricHeatCapacity
+    
+    # This vector is now have E at place of heater and 0 everywhere else.
+    x_h = x_h*P
+    
+    # Initial conditions
+    y_0 = np.zeros(int(rodLength/dx))
+
+    tspan = [0, duration]
+
+    return solve_ivp(numMCS_helper, tspan, y_0, args= (beta, gamma, delta, x_h, heatPulseLength, BoundaryConditionState,heatlossBool))
+
+
+
+
+def numMCS_helper(t, y, beta_, gamma_, delta_, x_h_, t_pulse_, bcS_,heatlossBool):
+    
+    # heater function to control heat added
     if t>=t_pulse_:
         gamma_= 0
     
     rhs_out = np.zeros(len(y))
     rhs_out[1:-1] = beta_*(y[2:]-2*y[1:-1]+y[:-2])+ gamma_*x_h_[1:-1]- delta_*y[1:-1]
+    
+    if heatlossBool:
+        # heat loss for copper rod
+        rhs_out[1:-1] -= delta_*y[1:-1]
+        
 
     #Left side of the rod boundary conditions
     if bcS_[0] ==1:
-        # Here is a heat sunk at the left side of the rod.
-        rhs_out[0] = 0
+        # nothing needs to be done here but just here for place holder
+        pass
     if bcS_[0] ==2:
         # This is the near end of the rod, floating.
-        rhs_out[0] = (2*beta_)*(y[1]-y[0])- delta_*y[0]
+        if heatlossBool:
+            rhs_out[0] = (2*beta_)*(y[1]-y[0])- delta_*y[0]
+        else:
+            rhs_out[0] = (2*beta_)*(y[1]-y[0])
 
-        # rhs_out[0] = (beta_/2)*(8*y[1]-y[2]-7*y[0])- delta_*y[0]
-        # rhs_out[1] = (2*beta_)*(y[2]-y[1])- delta_*y[1]
+       
     
     #Right side of the rod boundary conditions
     if bcS_[1] ==1:
-        # Here is a heat sunk at the left side of the rod.
-        rhs_out[-1] = 0
+        # nothing needs to be done here but just here for place holder
+        pass
     if bcS_[1] ==2:
         # This is the near end of the rod, floating.
-        rhs_out[-1] = (2*beta_)*(y[-2]-y[-1])- delta_*y[-1] 
-        # rhs_out[-1] = (beta_/2)*(8*y[-2]-y[-3]-7*y[-1])- delta_*y[-1]
-        # rhs_out[-2] = (2*beta_)*(y[-3]-y[-2])- delta_*y[-2] 
+        if heatlossBool:
+            rhs_out[-1] = (2*beta_)*(y[-2]-y[-1])- delta_*y[-1] 
+        else:
+            rhs_out[-1] = (2*beta_)*(y[-2]-y[-1])
+        
+    
 
     return rhs_out 
+
+
