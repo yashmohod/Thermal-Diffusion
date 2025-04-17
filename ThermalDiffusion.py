@@ -94,7 +94,7 @@ def EulerMethod(duration,rodLength,dt,dx,thermalConductivity,heatPulseLength,hea
         # if float
         if BoundaryConditionState[1] == 2:
             # temp.append((T[-2,j-1]  - T[-1,j-1]  ))
-            T[-1,j] = T[-1,j-1] + (2*dt*beta)*(T[-2,j-1]  - T[-1,j-1]  )
+            T[-1,j] = T[-1,j-1] + (2*dt*beta)*(8*T[-2,j-1] -T[-3,j-1]  - 7*T[-1,j-1]  )
             
         
         # heat diffusion on the Left end using bcS (boundary condition State)
@@ -105,7 +105,7 @@ def EulerMethod(duration,rodLength,dt,dx,thermalConductivity,heatPulseLength,hea
 
         # if float
         if BoundaryConditionState[0] == 2:
-            T[0,j] = T[0,j-1]+(2*dt*beta)*(T[1,j-1]  - T[0,j-1]) 
+            T[0,j] = T[0,j-1]+(2*dt*beta)*(8*T[1,j-1]-T[1,j-2]  - 7*T[0,j-1]) 
  
  
         if heatlossBool:
@@ -173,9 +173,9 @@ def numMCS_helper(t, y, beta_, gamma_, delta_, x_h_, t_pulse_, bcS_,heatlossBool
     if bcS_[0] ==2:
         # This is the near end of the rod, floating.
         if heatlossBool:
-            rhs_out[0] = (2*beta_)*(y[1]-y[0])- delta_*y[0]
+            rhs_out[0] = (2*beta_)*(8*y[1]-y[2]-7*y[0])- delta_*y[0]
         else:
-            rhs_out[0] = (2*beta_)*(y[1]-y[0])
+            rhs_out[0] = (2*beta_)*(8*y[1]-y[2]-7*y[0])
 
        
     
@@ -186,9 +186,9 @@ def numMCS_helper(t, y, beta_, gamma_, delta_, x_h_, t_pulse_, bcS_,heatlossBool
     if bcS_[1] ==2:
         # This is the near end of the rod, floating.
         if heatlossBool:
-            rhs_out[-1] = (2*beta_)*(y[-2]-y[-1])- delta_*y[-1] 
+            rhs_out[-1] = (2*beta_)*(8*y[-2]-y[-3]-7*y[-1])- delta_*y[-1] 
         else:
-            rhs_out[-1] = (2*beta_)*(y[-2]-y[-1])
+            rhs_out[-1] = (2*beta_)*(8*y[-2]-y[-3]-7*y[-1])
         
     
 
