@@ -40,18 +40,17 @@ There are two implementation for the numerical solution :
 # Numerical solution: Euler method
 def EulerMethod(duration,rodLength,dt,dx,thermalConductivity,heatPulseLength,heaterPosition,heaterLength,boundaryCondition,roomTemp,convectiveHeatTransfer,heatlossBool,Q ,radius,volumetricHeatCapacity,BoundaryConditionState):
 
-    # sapce time matrix (values represent temperature)
-    # rodLength
+    # space time matrix (values represent temperature)
     T = np.ones((int(rodLength/dx)+1,int(duration/dt)))*roomTemp
+    
     # time array
-    print(T)
     t = np.arange(0,duration,dt)
     
     # applying bcT (boundary condition Temperature)
-    # if BoundaryConditionState[0] == 1:
-    #     T[0,:] = boundaryCondition[0]
-    # if BoundaryConditionState[1] == 1:
-    #     T[-1,:] = boundaryCondition[1]
+    if BoundaryConditionState[0] == 1:
+        T[0,:] = boundaryCondition[0]
+    if BoundaryConditionState[1] == 1:
+        T[-1,:] = boundaryCondition[1]
         
     # Constants 
     beta = thermalConductivity/(volumetricHeatCapacity*dx**2) 
@@ -61,23 +60,20 @@ def EulerMethod(duration,rodLength,dt,dx,thermalConductivity,heatPulseLength,hea
     
     # number of segments in heater
     num_seg = int(heaterLength/dx)
-    # num_seg_p = num_seg
+
     # heater array 
     # (The array is 1 where the heater is and 0 everywhere else)
     x_h = np.zeros(len(T[:,0]))
     
-    print(len(x_h),num_seg)
+
     
     if len(T[:,0]) %2 == 0 and num_seg%2==0:
-        print(int((heaterPosition/dx))-int((num_seg/2))+1,int((heaterPosition/dx)+(num_seg/2)))
         x_h[int((heaterPosition/dx))-int((num_seg/2))+1:int((heaterPosition/dx)+(num_seg/2))]=1
     elif len(T[:,0]) %2 == 0 and num_seg%2!=0:
         num_seg +=1
-        print(int((heaterPosition/dx))-(int((num_seg/2)))+1,int((heaterPosition/dx))+(int((num_seg/2))),num_seg)
         x_h[int((heaterPosition/dx))-(int((num_seg/2)))+1:int((heaterPosition/dx))+(int((num_seg/2)))]=1
     elif len(T[:,0]) %2 != 0 and num_seg%2==0:
         num_seg +=1
-        print(int((heaterPosition/dx)+1)-(int((num_seg/2))+1),int((heaterPosition/dx)+1)+(int((num_seg/2))),num_seg)
         x_h[int((heaterPosition/dx)+1)-(int((num_seg/2))+1):int((heaterPosition/dx)+1)+(int((num_seg/2)))]=1
     
 
@@ -90,11 +86,11 @@ def EulerMethod(duration,rodLength,dt,dx,thermalConductivity,heatPulseLength,hea
     x_h = x_h*E
 
     for j in range(1,len(t)):
-        
+
         # Heater switch 
         # (gamma = 1 for t < heatPulse)
-        # (gamma = 10 for t > heatPulse)
-        if j>=round(heatPulseLength/dt):
+        # (gamma = 0 for t > heatPulse)
+        if j>=int(heatPulseLength/dt):
             gamma= 0
 
         # heat diffusion in the rod
@@ -126,7 +122,7 @@ def EulerMethod(duration,rodLength,dt,dx,thermalConductivity,heatPulseLength,hea
             # heat loss for copper rod
             T[:,j] =  T[:,j] - np.abs(roomTemp  - T[:,j-1])*delta*dt
 
-    # returing the temperature difference
+    # returning the temperature difference and time 
     return T -roomTemp,t
 
 
@@ -138,52 +134,38 @@ def SolveIVP_Method (duration,rodLength,dt,dx,thermalConductivity,heatPulseLengt
     gamma = 1
     delta = 2*convectiveHeatTransfer/(volumetricHeatCapacity*radius)
 
-       # Initial conditions
+
+    # Initial conditions
     y_0 = np.zeros(int(rodLength/dx)+1)
-    
     
     # number of segments in heater
     num_seg = int(heaterLength/dx)
-    # num_seg_p = num_seg
+
     # heater array 
     # (The array is 1 where the heater is and 0 everywhere else)
     x_h = np.zeros(len(y_0))
     
-    # # heater array 
-    # # (The array is 1 where the heater is and 0 everywhere else)
-    # x_h = np.zeros(int(rodLength/dx)+1)
-    # x_h[int((heaterPosition/dx)-(num_seg/2)):int((heaterPosition/dx)+(num_seg/2))]=1
-    
-
-    # # volume of heater
-    # vol_h = np.pi*num_seg*dx*radius**2 
 
     
     if len(x_h) %2 == 0 and num_seg%2==0:
-        print(int((heaterPosition/dx))-int((num_seg/2))+1,int((heaterPosition/dx)+(num_seg/2)))
         x_h[int((heaterPosition/dx))-int((num_seg/2))+1:int((heaterPosition/dx)+(num_seg/2))]=1
     elif len(x_h) %2 == 0 and num_seg%2!=0:
         num_seg +=1
-        print(int((heaterPosition/dx))-(int((num_seg/2)))+1,int((heaterPosition/dx))+(int((num_seg/2))),num_seg)
         x_h[int((heaterPosition/dx))-(int((num_seg/2)))+1:int((heaterPosition/dx))+(int((num_seg/2)))]=1
     elif len(x_h) %2 != 0 and num_seg%2==0:
         num_seg +=1
-        print(int((heaterPosition/dx)+1)-(int((num_seg/2))+1),int((heaterPosition/dx)+1)+(int((num_seg/2))),num_seg)
         x_h[int((heaterPosition/dx)+1)-(int((num_seg/2))+1):int((heaterPosition/dx)+1)+(int((num_seg/2)))]=1
     
 
     # volume of heater
     vol_h = np.pi*(num_seg)*dx*radius**2 
-    print(vol_h,num_seg,Q)
     
     # Power supplied per m^3
     P = Q*(1/heatPulseLength)/vol_h/volumetricHeatCapacity
-    print(P,heatPulseLength)
-    # This vector is now have E at place of heater and 0 everywhere else.
+    # This vector is now have P at place of heater and 0 everywhere else.
     x_h = x_h*P
     
  
-
     tspan = [0, duration]
 
     return solve_ivp(numMCS_helper, tspan, y_0, args= (beta, gamma, delta, x_h, heatPulseLength, BoundaryConditionState,heatlossBool))
@@ -193,7 +175,9 @@ def SolveIVP_Method (duration,rodLength,dt,dx,thermalConductivity,heatPulseLengt
 
 def numMCS_helper(t, y, beta_, gamma_, delta_, x_h_, t_pulse_, bcS_,heatlossBool):
     
-    # heater function to control heat added
+    # Heater switch 
+        # (gamma = 1 for t < heatPulse)
+        # (gamma = 0 for t > heatPulse)
     if t>=t_pulse_:
         gamma_= 0
     
