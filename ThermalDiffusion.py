@@ -17,14 +17,6 @@ def anaMet(Q_,A_,kappa_,s_,t,d_,h_,a_,heatlossBool_,lag,dt_):
         # temp2[int(lag/dt_):] = temp[:]
         return temp ,t_
     
-# numerical method Vectorized
-def g(heatAdd_,j_,count_,segmentStart,segmentEnd,totRodSeg ):
-    rod = np.zeros(totRodSeg,dtype=np.float64)
-    if j_<= count_:
-        for curSeg in range(segmentStart,segmentEnd+1):
-            rod[curSeg] = heatAdd_
-    return rod
-
 
 """
 There are two implementation for the numerical solution : 
@@ -66,7 +58,7 @@ def EulerMethod(duration,rodLength,dt,dx,thermalConductivity,heatPulseLength,hea
     x_h = np.zeros(len(T[:,0]))
     
 
-    
+    # heater array adjustment to be centered on the rod 
     if len(T[:,0]) %2 == 0 and num_seg%2==0:
         x_h[int((heaterPosition/dx))-int((num_seg/2))+1:int((heaterPosition/dx)+(num_seg/2))]=1
     elif len(T[:,0]) %2 == 0 and num_seg%2!=0:
@@ -168,12 +160,12 @@ def SolveIVP_Method (duration,rodLength,dt,dx,thermalConductivity,heatPulseLengt
  
     tspan = [0, duration]
 
-    return solve_ivp(numMCS_helper, tspan, y_0, args= (beta, gamma, delta, x_h, heatPulseLength, BoundaryConditionState,heatlossBool))
+    return solve_ivp(FCDDiffEq, tspan, y_0, args= (beta, gamma, delta, x_h, heatPulseLength, BoundaryConditionState,heatlossBool))
 
 
 
 
-def numMCS_helper(t, y, beta_, gamma_, delta_, x_h_, t_pulse_, bcS_,heatlossBool):
+def FCDDiffEq(t, y, beta_, gamma_, delta_, x_h_, t_pulse_, bcS_,heatlossBool):
     
     # Heater switch 
         # (gamma = 1 for t < heatPulse)
